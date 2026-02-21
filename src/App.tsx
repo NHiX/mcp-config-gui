@@ -493,14 +493,21 @@ function App() {
     updateServer(name, { env: newEnv });
   };
 
-  const addCommonEnv = (name: string) => {
+  const addCommonEnv = (name: string, key?: string) => {
     const commonEnv = {
       PATH: '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
       HOME: '/Users/username',
       USER: 'username'
     };
     const server = servers[name];
-    const newEnv = { ...(server.env || {}), ...commonEnv };
+    if (!server) return;
+
+    const newEnv = { ...(server.env || {}) };
+    if (key) {
+      newEnv[key] = '';
+    } else {
+      Object.assign(newEnv, commonEnv);
+    }
     updateServer(name, { env: newEnv });
   };
 
@@ -783,286 +790,270 @@ function App() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Command <span className="label-hint">(Binary or script to run)</span></label>
-              <input
-                type="text"
-                value={servers[activeServer].command}
-                onChange={(e) => updateServer(activeServer, { command: e.target.value })}
-                placeholder="e.g., npx, docker, python, uvx"
-              />
+            {/* Tab Navigation */}
+            <div className="tab-nav mb-24">
+              <button
+                className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
+                onClick={() => setActiveTab('config')}
+              >
+                Config
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'doc' ? 'active' : ''}`}
+                onClick={() => setActiveTab('doc')}
+              >
+                Documentation
+              </button>
             </div>
 
-            <div className="form-section">
-              <div className="section-header">
-                <label>Arguments</label>
-                <button className="icon-btn-text" onClick={() => addArg(activeServer)}>
-                  <Plus size={14} /> Add
-                </button>
-              </div>
-              <div className="args-list">
-                {servers[activeServer].args.map((arg, index) => (
-                  <div key={index} className="arg-row">
-                    <span className="arg-index">{index}</span>
-                    <input
-                      {/* Tab Navigation */}
-            <div className="tab-nav mb-24">
-                      <button
-                        className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('config')}
-                      >
-                        Config
-                      </button>
-                      <button
-                        className={`tab-btn ${activeTab === 'doc' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('doc')}
-                      >
-                        Documentation
-                      </button>
-                    </div>
-
-                    {activeTab === 'config' ? (
-                      <>
-                        <div className="form-group mb-24">
-                          <label>Command (Executable)</label>
-                          <input
-                            type="text"
-                            value={servers[activeServer].command}
-                            onChange={(e) => {
-                              const newServers = { ...servers };
-                              newServers[activeServer].command = e.target.value;
-                              setServers(newServers);
-                            }}
-                            placeholder="e.g. npx or uvx"
-                          />
-                        </div>
-
-                        <div className="form-group mb-24">
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label>Arguments</label>
-                            <button className="icon-btn-text" onClick={() => addArg(activeServer)}>+ Add Arg</button>
-                          </div>
-                          {servers[activeServer].args.map((arg, idx) => (
-                            <div key={idx} className="list-item mt-8">
-                              <input
-                                type="text"
-                                value={arg}
-                                onChange={(e) => updateArg(activeServer, idx, e.target.value)}
-                                placeholder="--example"
-                              />
-                              <button className="icon-btn-sm danger" onClick={() => removeArg(activeServer, idx)}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="form-group mb-24">
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label>Environment Variables</label>
-                            <div className="section-actions">
-                              <button className="ghost-btn sm" onClick={() => addCommonEnv(activeServer)}>
-                                <Plus size={14} style={{ marginRight: '4px' }} /> Add Standard
-                              </button>
-                              <button className="icon-btn-text" onClick={() => addEnv(activeServer)}>
-                                <Plus size={14} /> Add Custom
-                              </button>
-                            </div>
-                          </div>
-                          {Object.entries(servers[activeServer].env || {}).map(([key, val]) => (
-                            <div key={key} className="list-item mt-8">
-                              <input
-                                type="text"
-                                value={key}
-                                onChange={(e) => updateEnvKey(activeServer, key, e.target.value)}
-                                className="env-key"
-                              />
-                              <div className="password-input">
-                                <input
-                                  type={maskSecrets ? "password" : "text"}
-                                  value={val}
-                                  onChange={(e) => updateEnvVal(activeServer, key, e.target.value)}
-                                  placeholder="value"
-                                />
-                                <button
-                                  className="mask-btn"
-                                  onClick={() => setMaskSecrets(!maskSecrets)}
-                                >
-                                  {maskSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
-                                </button>
-                              </div>
-                              <button className="icon-btn-sm danger" onClick={() => removeEnv(activeServer, key)}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          {/* Smart Suggestions for common env keys */}
-                          {preconfiguredServers.find(s => activeServer.includes(s.name) || s.name.includes(activeServer))?.envKeys.map(key => (
-                            !(servers[activeServer].env?.[key] !== undefined) && (
-                              <button key={key} className="preset-chip mt-12" onClick={() => addCommonEnv(activeServer, key)}>
-                                <Plus size={12} style={{ marginRight: '2px' }} /> Suggest: {key}
-                              </button>
-                            )
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="doc-content">
-                        {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''] ? (
-                          <>
-                            <div className="doc-section">
-                              <h4>Setup Guide: {activeServer}</h4>
-                              <p className="text-muted mt-8">
-                                {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''].summary}
-                              </p>
-                            </div>
-                            <div className="doc-section mt-16">
-                              <h5>Recommended Steps</h5>
-                              <ul className="doc-list mt-12">
-                                {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''].steps.map((s, i) => (
-                                  <li key={i}>{s}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="empty-docs">
-                            <p>No specific documentation found for this server.</p>
-                            <p className="text-sm text-muted mt-8">Try searching on <a href="https://github.com/modelcontextprotocol/servers" target="_blank" rel="noreferrer" className="text-accent">Official Servers Registry</a></p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {isNative && isLogVisible && (
-                      <div className="logs-panel mt-16">
-                        <div className="logs-header" onClick={() => setIsLogVisible(!isLogVisible)}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Activity size={14} className={isTesting ? 'pulse' : ''} />
-                            <span style={{ fontSize: '12px', fontWeight: 600 }}>LIVE LOGS</span>
-                            {isTesting && <span className="badge-live">RUNNING</span>}
-                          </div>
-                          <button className="icon-btn-text sm" onClick={(e) => { e.stopPropagation(); setTestLogs([]); }}>
-                            Clear
-                          </button>
-                        </div>
-                        <div className="logs-body">
-                          {testLogs.length === 0 ? (
-                            <div className="empty-logs">Listening for server output...</div>
-                          ) : (
-                            testLogs.map(log => (
-                              <div key={log.id} className={`log-entry ${log.type}`}>
-                                <span className="log-prefix">[{log.type.toUpperCase()}]</span>
-                                <span className="log-text">{log.data}</span>
-                              </div>
-                            ))
-                          )}
-                          <div ref={logEndRef} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                <div className="empty-state-main">
-                  <Server size={64} className="muted-icon" />
-                  <h2>Universal MCP Manager</h2>
-                  <p>Select a server, import a config, or use a preset to get started.</p>
-                  <div style={{ display: 'flex', gap: '16px' }}>
-                    <button className="primary-btn mt-24" onClick={() => setIsModalOpen(true)}>
-                      <Plus size={16} style={{ marginRight: '8px' }} /> Add Server
-                    </button>
-                    <button className="ghost-btn mt-24" style={{ border: '1px solid var(--border-color)' }} onClick={() => setIsPresetModalOpen(true)}>
-                      <Layout size={16} style={{ marginRight: '8px' }} /> View Presets
-                    </button>
-                  </div>
+            {activeTab === 'config' ? (
+              <div className="editor-body">
+                <div className="form-group mb-24">
+                  <label>Command (Executable)</label>
+                  <input
+                    type="text"
+                    value={servers[activeServer].command}
+                    onChange={(e) => updateServer(activeServer, { command: e.target.value })}
+                    placeholder="e.g. npx or uvx"
+                  />
                 </div>
-        )}
-              </div>
 
-              {/* Preview Pane */}
-              <div className="preview-pane">
-                <div className="preview-header">
-                  <h3>Generated Config</h3>
-                  <div className="format-selector">
-                    <select
-                      value={exportFormat}
-                      onChange={(e) => setExportFormat(e.target.value as 'generic' | 'claude' | 'gemini' | 'cursor')}
-                      className="export-select"
-                    >
-                      <option value="generic">Standard (mcp_config.json)</option>
-                      <option value="claude">Claude Desktop</option>
-                      <option value="gemini">Gemini Sidekick</option>
-                      <option value="cursor">Cursor AI</option>
-                    </select>
-                    <button className="primary-btn" onClick={exportConfig} disabled={Object.keys(servers).length === 0}>
-                      <Download size={14} />
-                    </button>
+                <div className="form-group mb-24">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Arguments</label>
+                    <button className="icon-btn-text" onClick={() => addArg(activeServer)}>+ Add Arg</button>
                   </div>
-                </div>
-                <div className="code-block">
-                  <div className="format-info">
-                    {exportFormat === 'claude' && <span className="path-hint">~/.claude_desktop_config.json</span>}
-                    {exportFormat === 'gemini' && <span className="path-hint">~/.gemini/settings.json</span>}
-                    {exportFormat === 'cursor' && <span className="path-hint">Cursor global storage path</span>}
-                    {exportFormat === 'generic' && <span className="path-hint">Generic MCP Schema</span>}
-                  </div>
-                  <pre>{JSON.stringify({ mcpServers: servers }, null, 2)}</pre>
-                </div>
-              </div>
-
-              {/* Add Server Pre-configured Modal */}
-              {isModalOpen && (
-                <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-                  <div className="modal-content" onClick={e => e.stopPropagation()}>
-                    <div className="modal-header">
-                      <h2>Browse Servers</h2>
-                      <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
-                        <X size={20} />
-                      </button>
-                    </div>
-
-                    <div className="modal-search">
-                      <Search size={16} className="search-icon" />
+                  {servers[activeServer].args.map((arg, idx) => (
+                    <div key={idx} className="list-item mt-8">
                       <input
                         type="text"
-                        placeholder="Search community catalog..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        autoFocus
+                        value={arg}
+                        onChange={(e) => updateArg(activeServer, idx, e.target.value)}
+                        placeholder="--example"
                       />
+                      <button className="icon-btn-sm danger" onClick={() => removeArg(activeServer, idx)}>
+                        <Trash2 size={14} />
+                      </button>
                     </div>
+                  ))}
+                  {servers[activeServer].args.length === 0 && (
+                    <div className="empty-list mt-8">No arguments defined</div>
+                  )}
+                </div>
 
-                    <div className="modal-body preconfigured-grid">
-                      {filteredServers.map((server, idx) => (
-                        <div
-                          key={server.name + idx}
-                          className={`preconfig-card ${server.isCommunity ? 'community-card' : ''}`}
-                          onClick={() => handleAddServer(server)}
-                        >
-                          <div className="preconfig-icon">
-                            {server.icon}
-                          </div>
-                          <div className="preconfig-info">
-                            <h3>
-                              {server.name}
-                              {server.isCommunity && <span className="community-badge">Community</span>}
-                            </h3>
-                            <p>{server.description}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p className="text-muted text-sm">
-                        Powered by <a href="https://github.com/punkpeye/awesome-mcp-servers" target="_blank" rel="noreferrer" className="text-accent">Awesome MCP</a>
-                      </p>
-                      {isLoadingCommunity && <p className="text-accent text-sm">Updating database...</p>}
+                <div className="form-group mb-24">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Environment Variables</label>
+                    <div className="section-actions">
+                      <button className="ghost-btn sm" onClick={() => addCommonEnv(activeServer)}>
+                        <Plus size={14} style={{ marginRight: '4px' }} /> Add Standard
+                      </button>
+                      <button className="icon-btn-text" onClick={() => addEnv(activeServer)}>
+                        <Plus size={14} /> Add Custom
+                      </button>
                     </div>
                   </div>
+                  {Object.entries(servers[activeServer].env || {}).map(([key, val]) => (
+                    <div key={key} className="list-item mt-8">
+                      <input
+                        type="text"
+                        value={key}
+                        onChange={(e) => updateEnvKey(activeServer, key, e.target.value)}
+                        className="env-key"
+                      />
+                      <div className="password-input">
+                        <input
+                          type={maskSecrets ? "password" : "text"}
+                          value={val}
+                          onChange={(e) => updateEnvVal(activeServer, key, e.target.value)}
+                          placeholder="value"
+                        />
+                        <button
+                          className="mask-btn"
+                          onClick={() => setMaskSecrets(!maskSecrets)}
+                        >
+                          {maskSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                      <button className="icon-btn-sm danger" onClick={() => removeEnv(activeServer, key)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {(!servers[activeServer].env || Object.keys(servers[activeServer].env!).length === 0) && (
+                    <div className="empty-list mt-8">No environment variables defined</div>
+                  )}
+                  {/* Smart Suggestions */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {preconfiguredServers.find(s => activeServer.includes(s.name) || s.name.includes(activeServer))?.envKeys.map(key => (
+                      !(servers[activeServer].env?.[key] !== undefined) && (
+                        <button key={key} className="preset-chip mt-12" onClick={() => addCommonEnv(activeServer, key)}>
+                          <Plus size={12} style={{ marginRight: '2px' }} /> Suggest: {key}
+                        </button>
+                      )
+                    ))}
+                  </div>
                 </div>
-              )}
+              </div>
+            ) : (
+              <div className="doc-content">
+                {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''] ? (
+                  <>
+                    <div className="doc-section">
+                      <h4>Setup Guide: {activeServer}</h4>
+                      <p className="text-muted mt-8">
+                        {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''].summary}
+                      </p>
+                    </div>
+                    <div className="doc-section mt-16">
+                      <h5>Recommended Steps</h5>
+                      <ul className="doc-list mt-12">
+                        {serverHelp[Object.keys(serverHelp).find(k => activeServer.includes(k) || k.includes(activeServer)) || ''].steps.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-docs">
+                    <p>No specific documentation found for this server.</p>
+                    <p className="text-sm text-muted mt-8">Try searching on <a href="https://github.com/modelcontextprotocol/servers" target="_blank" rel="noreferrer" className="text-accent">Official Servers Registry</a></p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Live Logs Panel */}
+            {isNative && isLogVisible && (
+              <div className="logs-panel mt-16">
+                <div className="logs-header" onClick={() => setIsLogVisible(!isLogVisible)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={14} className={isTesting ? 'pulse' : ''} />
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>LIVE LOGS</span>
+                    {isTesting && <span className="badge-live">RUNNING</span>}
+                  </div>
+                  <button className="icon-btn-text sm" onClick={(e) => { e.stopPropagation(); setTestLogs([]); }}>
+                    Clear
+                  </button>
+                </div>
+                <div className="logs-body">
+                  {testLogs.length === 0 ? (
+                    <div className="empty-logs">Listening for server output...</div>
+                  ) : (
+                    testLogs.map(log => (
+                      <div key={log.id} className={`log-entry ${log.type}`}>
+                        <span className="log-prefix">[{log.type.toUpperCase()}]</span>
+                        <span className="log-text">{log.data}</span>
+                      </div>
+                    ))
+                  )}
+                  <div ref={logEndRef} />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="empty-state-main">
+            <Server size={64} className="muted-icon" />
+            <h2>Universal MCP Manager</h2>
+            <p>Select a server, import a config, or use a preset to get started.</p>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <button className="primary-btn mt-24" onClick={() => setIsModalOpen(true)}>
+                <Plus size={16} style={{ marginRight: '8px' }} /> Add Server
+              </button>
+              <button className="ghost-btn mt-24" style={{ border: '1px solid var(--border-color)' }} onClick={() => setIsPresetModalOpen(true)}>
+                <Layout size={16} style={{ marginRight: '8px' }} /> View Presets
+              </button>
             </div>
-            )
+          </div>
+        )}
+
+        {/* Preview Pane */}
+        <div className="preview-pane">
+          <div className="preview-header">
+            <h3>Generated Config</h3>
+            <div className="format-selector">
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as 'generic' | 'claude' | 'gemini' | 'cursor')}
+                className="export-select"
+              >
+                <option value="generic">Standard (mcp_config.json)</option>
+                <option value="claude">Claude Desktop</option>
+                <option value="gemini">Gemini Sidekick</option>
+                <option value="cursor">Cursor AI</option>
+              </select>
+              <button className="primary-btn" onClick={exportConfig} disabled={Object.keys(servers).length === 0}>
+                <Download size={14} />
+              </button>
+            </div>
+          </div>
+          <div className="code-block">
+            <div className="format-info">
+              {exportFormat === 'claude' && <span className="path-hint">~/.claude_desktop_config.json</span>}
+              {exportFormat === 'gemini' && <span className="path-hint">~/.gemini/settings.json</span>}
+              {exportFormat === 'cursor' && <span className="path-hint">Cursor global storage path</span>}
+              {exportFormat === 'generic' && <span className="path-hint">Generic MCP Schema</span>}
+            </div>
+            <pre>{JSON.stringify({ mcpServers: servers }, null, 2)}</pre>
+          </div>
+        </div>
+
+        {/* Modals */}
+        {isModalOpen && (
+          <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Browse Servers</h2>
+                <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-search">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search community catalog..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="modal-body preconfigured-grid">
+                {filteredServers.map((server, idx) => (
+                  <div
+                    key={server.name + idx}
+                    className={`preconfig-card ${server.isCommunity ? 'community-card' : ''}`}
+                    onClick={() => handleAddServer(server)}
+                  >
+                    <div className="preconfig-icon">
+                      {server.icon}
+                    </div>
+                    <div className="preconfig-info">
+                      <h3>
+                        {server.name}
+                        {server.isCommunity && <span className="community-badge">Community</span>}
+                      </h3>
+                      <p>{server.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p className="text-muted text-sm">
+                  Powered by <a href="https://github.com/punkpeye/awesome-mcp-servers" target="_blank" rel="noreferrer" className="text-accent">Awesome MCP</a>
+                </p>
+                {isLoadingCommunity && <p className="text-accent text-sm">Updating database...</p>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
-            export default App
+export default App;

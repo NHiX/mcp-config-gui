@@ -90,7 +90,7 @@ ipcMain.on('open-config-folder', (_, client: string) => {
 
 ipcMain.handle('discover-configs', async () => {
     const clients = ['claude', 'gemini'];
-    const results: Record<string, any> = {};
+    const results: Record<string, unknown> = {};
 
     for (const client of clients) {
         const filePath = getPathForClient(client);
@@ -98,8 +98,8 @@ ipcMain.handle('discover-configs', async () => {
             try {
                 const data = fs.readFileSync(filePath, 'utf-8');
                 results[client] = JSON.parse(data);
-            } catch (e) {
-                console.warn(`Failed to parse config for ${client}`);
+            } catch (err) {
+                console.warn(`Failed to parse config for ${client}`, err);
             }
         }
     }

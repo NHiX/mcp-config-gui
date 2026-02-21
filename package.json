@@ -1,7 +1,10 @@
 {
   "name": "mcp-config-gui",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Premium Desktop GUI for Model Context Protocol (MCP) servers",
+  "author": "Nicolas Luquet",
+  "homepage": "https://github.com/NHiX/mcp-config-gui",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -13,6 +16,41 @@
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev -- --host 127.0.0.1 --port 5176 --strictPort\" \"wait-on http://127.0.0.1:5176 && tsc -p electron/tsconfig.json && electron .\"",
     "electron:pack": "npm run build && npm run electron:build && electron-builder --dir",
     "electron:dist": "npm run build && npm run electron:build && electron-builder"
+  },
+  "build": {
+    "appId": "com.nicolasluquet.mcp-config-gui",
+    "productName": "MCP Config GUI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist",
+      "dist-electron"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}.${ext}",
+      "contents": [
+        {
+          "x": 410,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 130,
+          "y": 150,
+          "type": "file"
+        }
+      ]
+    }
   },
   "dependencies": {
     "electron-serve": "^3.0.1",

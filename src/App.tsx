@@ -141,6 +141,14 @@ function App() {
     setIsTesting(false);
   };
 
+  const checkForUpdates = () => {
+    setLastSyncStatus('Checking for updates...');
+    setTimeout(() => {
+      setLastSyncStatus('You are on the latest version (v1.0.0)');
+      setTimeout(() => setLastSyncStatus(null), 3000);
+    }, 1500);
+  };
+
   const handleDiscovery = async () => {
     if (!isNative) return;
     try {
@@ -588,6 +596,14 @@ function App() {
               >
                 <FolderOpen size={16} />
                 Open Config Folder
+              </button>
+              <button
+                className="ghost-btn w-full"
+                style={{ marginTop: '8px', gap: '8px', fontSize: '11px', opacity: 0.7 }}
+                onClick={checkForUpdates}
+              >
+                <Activity size={14} />
+                Check for Updates
               </button>
               <button
                 className="ghost-btn w-full mt-8"

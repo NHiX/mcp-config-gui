@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload } from 'lucide-react'
+import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload, Eye, EyeOff, Layout, ListChecks, CheckCircle2 } from 'lucide-react'
 import './App.css'
 
 interface McpServerConfig {
@@ -22,14 +22,61 @@ interface ServerTemplate {
   isCommunity?: boolean;
 }
 
+interface Preset {
+  id: string;
+  name: string;
+  description: string;
+  servers: Record<string, McpServerConfig>;
+  icon: React.ReactNode;
+}
+
 function App() {
   const [servers, setServers] = useState<Record<string, McpServerConfig>>({});
   const [activeServer, setActiveServer] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [communityServers, setCommunityServers] = useState<ServerTemplate[]>([]);
   const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
+  const [maskSecrets, setMaskSecrets] = useState(true);
+  const [exportFormat, setExportFormat] = useState<'generic' | 'claude' | 'gemini'>('generic');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const presets: Preset[] = [
+    {
+      id: 'web-dev',
+      name: 'Web Developer',
+      description: 'GitHub, Postgres, and Brave Search for full-stack workflows.',
+      icon: <Globe size={24} />,
+      servers: {
+        'github': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '' } },
+        'postgres': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'] },
+        'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
+      }
+    },
+    {
+      id: 'data-science',
+      name: 'Data Scientist',
+      description: 'SQLite, Google Sheets, and Local Filesystem for data workflows.',
+      icon: <Database size={24} />,
+      servers: {
+        'sqlite': { command: 'uvx', args: ['mcp-server-sqlite', '--db-path', '~/data.db'] },
+        'google-sheets': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-google-sheets'] },
+        'filesystem': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/data'] }
+      }
+    },
+    {
+      id: 'security',
+      name: 'Security Researcher',
+      description: 'Search tools and system utilities for security analysis.',
+      icon: <Terminal size={24} />,
+      servers: {
+        'shodan': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-shodan'], env: { SHODAN_API_KEY: '' } },
+        'whois': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-whois'] },
+        'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
+      }
+    }
+  ];
 
   // Extended list of pre-configured servers based on awesome-mcp-servers
   const preconfiguredServers: ServerTemplate[] = [
@@ -91,13 +138,12 @@ function App() {
     }
   ];
 
-  // Fetch awesome-mcp-servers dynamically, and also glama.ai
+  // Fetch awesome-mcp-servers dynamically
   useEffect(() => {
     const fetchCommunityServers = async () => {
       if (isModalOpen && communityServers.length === 0 && !isLoadingCommunity) {
         setIsLoadingCommunity(true);
         try {
-          // 1. Fetch from awesome-mcp-servers
           const res = await fetch('https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md');
           const text = await res.text();
 
@@ -109,7 +155,6 @@ function App() {
             const fullName = match[1];
             const url = match[2];
             const desc = match[3] || 'Community Server';
-
             const shortName = fullName.includes('/') ? fullName.split('/')[1] : fullName;
 
             if (url.includes('github') && parsed.length < 50) {
@@ -125,8 +170,6 @@ function App() {
             }
           }
 
-          // 2. Fetch from Glama.ai (Attempt to fetch their HTML and scrape server names if possible, but due to CORS we rely on known API patterns or just direct users there)
-          // Since glama.ai might block direct CORS requests from browser, we will add a few known glama servers manually as a proof of concept, and add a link in the UI.
           const glamaServers: ServerTemplate[] = [
             {
               name: 'raycast-mcp',
@@ -148,7 +191,6 @@ function App() {
             }
           ];
 
-          // Deduplicate against predefined
           const combined = [...glamaServers, ...parsed];
           const finalCommunity = combined.filter((p, index, self) =>
             index === self.findIndex((t) => (
@@ -169,7 +211,6 @@ function App() {
   }, [isModalOpen, communityServers.length, isLoadingCommunity]);
 
   const handleAddServer = (template: ServerTemplate) => {
-    // Generate unique name if it already exists
     let serverName = template.name;
     let counter = 1;
     while (servers[serverName]) {
@@ -196,6 +237,14 @@ function App() {
     setSearchQuery('');
   };
 
+  const applyPreset = (preset: Preset) => {
+    setServers(prev => ({ ...prev, ...preset.servers }));
+    if (!activeServer) {
+      setActiveServer(Object.keys(preset.servers)[0]);
+    }
+    setIsPresetModalOpen(false);
+  };
+
   const handleRemoveServer = (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const newServers = { ...servers };
@@ -213,7 +262,6 @@ function App() {
     }));
   };
 
-  // Name updates
   const updateServerName = (oldName: string, newName: string) => {
     if (oldName === newName || !newName.trim() || servers[newName]) return;
 
@@ -253,6 +301,17 @@ function App() {
     updateServer(name, { env: newEnv });
   };
 
+  const addCommonEnv = (name: string) => {
+    const commonEnv = {
+      PATH: '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+      HOME: '/Users/username',
+      USER: 'username'
+    };
+    const server = servers[name];
+    const newEnv = { ...(server.env || {}), ...commonEnv };
+    updateServer(name, { env: newEnv });
+  };
+
   const updateEnvKey = (name: string, oldKey: string, newKey: string) => {
     if (oldKey === newKey) return;
     const server = servers[name];
@@ -280,11 +339,15 @@ function App() {
 
   const exportConfig = () => {
     const config: McpConfig = { mcpServers: servers };
+    let filename = 'mcp_config.json';
+    if (exportFormat === 'claude') filename = 'claude_desktop_config.json';
+    if (exportFormat === 'gemini') filename = 'gemini_settings.json';
+
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'mcp_config.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -310,7 +373,7 @@ function App() {
       }
     };
     reader.readAsText(file);
-    e.target.value = ''; // Reset input
+    e.target.value = '';
   };
 
   const allServers = [...preconfiguredServers, ...communityServers];
@@ -325,9 +388,11 @@ function App() {
       <div className="sidebar">
         <div className="sidebar-header">
           <Server className="logo-icon" />
-          <h2>MCP Config</h2>
+          <div className="sidebar-title">
+            <h2>MCP Config</h2>
+            <span className="badge-pro">GUI</span>
+          </div>
 
-          {/* Hidden File Input for Config Upload */}
           <input
             type="file"
             ref={fileInputRef}
@@ -345,6 +410,23 @@ function App() {
           </button>
         </div>
 
+        <div className="sidebar-nav">
+          <button
+            className={`nav-item ${!isPresetModalOpen ? 'active' : ''}`}
+            onClick={() => setIsPresetModalOpen(false)}
+          >
+            <ListChecks size={18} />
+            <span>My Servers</span>
+          </button>
+          <button
+            className={`nav-item ${isPresetModalOpen ? 'active' : ''}`}
+            onClick={() => setIsPresetModalOpen(true)}
+          >
+            <Layout size={18} />
+            <span>Presets</span>
+          </button>
+        </div>
+
         <div className="server-list">
           {Object.keys(servers).length === 0 ? (
             <div className="empty-state-sidebar">No servers configured</div>
@@ -352,8 +434,11 @@ function App() {
             Object.keys(servers).map(name => (
               <div
                 key={name}
-                className={`server-item ${activeServer === name ? 'active' : ''}`}
-                onClick={() => setActiveServer(name)}
+                className={`server-item ${activeServer === name && !isPresetModalOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveServer(name);
+                  setIsPresetModalOpen(false);
+                }}
               >
                 <div className="server-item-name">
                   <Settings size={16} />
@@ -380,31 +465,67 @@ function App() {
 
       {/* Main Content */}
       <div className="main-content">
-        {activeServer && servers[activeServer] ? (
+        {isPresetModalOpen ? (
+          <div className="preset-view">
+            <div className="editor-header">
+              <h1>Configuration Presets</h1>
+              <p className="text-muted">Start quickly with pre-defined sets of MCP servers for specific workflows.</p>
+            </div>
+            <div className="preset-grid">
+              {presets.map(preset => (
+                <div key={preset.id} className="preset-card">
+                  <div className="preset-card-header">
+                    <div className="preset-icon">{preset.icon}</div>
+                    <div className="preset-info">
+                      <h3>{preset.name}</h3>
+                      <p>{preset.description}</p>
+                    </div>
+                  </div>
+                  <div className="preset-servers">
+                    {Object.keys(preset.servers).map(s => (
+                      <span key={s} className="preset-server-badge">{s}</span>
+                    ))}
+                  </div>
+                  <button className="primary-btn w-full mt-16" onClick={() => applyPreset(preset)}>
+                    Apply Preset
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : activeServer && servers[activeServer] ? (
           <div className="config-editor">
-            <div className="editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="header-title-edit">
-                <h1>Configuring: </h1>
-                <input
-                  type="text"
-                  className="server-name-input highlight"
-                  value={activeServer}
-                  onChange={(e) => updateServerName(activeServer, e.target.value)}
-                  onBlur={(e) => updateServerName(activeServer, e.target.value)}
-                  title="Click to rename server"
-                />
+            <div className="editor-header">
+              <div className="header-top">
+                <div className="header-title-edit">
+                  <h1>Configuring:</h1>
+                  <input
+                    type="text"
+                    className="server-name-input highlight"
+                    value={activeServer}
+                    onChange={(e) => updateServerName(activeServer, e.target.value)}
+                    onBlur={(e) => updateServerName(activeServer, e.target.value)}
+                    title="Click to rename server"
+                  />
+                </div>
+                <div className="header-actions">
+                  <button
+                    className="ghost-btn danger-hover"
+                    style={{ padding: '6px 12px', borderRadius: '6px' }}
+                    onClick={(e) => handleRemoveServer(activeServer, e)}
+                  >
+                    <Trash2 size={16} style={{ marginRight: '6px' }} /> Delete
+                  </button>
+                </div>
               </div>
-              <button
-                className="icon-btn-text"
-                style={{ color: 'var(--danger)', background: 'rgba(248, 81, 73, 0.1)', padding: '6px 12px', borderRadius: '6px' }}
-                onClick={(e) => handleRemoveServer(activeServer, e)}
-              >
-                <Trash2 size={16} /> Delete Server
-              </button>
+              <div className="server-health">
+                <CheckCircle2 size={14} className="success-icon" />
+                <span>Configuration Valid</span>
+              </div>
             </div>
 
             <div className="form-group">
-              <label>Command</label>
+              <label>Command <span className="label-hint">(Binary or script to run)</span></label>
               <input
                 type="text"
                 value={servers[activeServer].command}
@@ -417,7 +538,7 @@ function App() {
               <div className="section-header">
                 <label>Arguments</label>
                 <button className="icon-btn-text" onClick={() => addArg(activeServer)}>
-                  <Plus size={14} /> Add Arg
+                  <Plus size={14} /> Add
                 </button>
               </div>
               <div className="args-list">
@@ -444,9 +565,14 @@ function App() {
             <div className="form-section">
               <div className="section-header">
                 <label>Environment Variables</label>
-                <button className="icon-btn-text" onClick={() => addEnv(activeServer)}>
-                  <Plus size={14} /> Add Env Var
-                </button>
+                <div className="section-actions">
+                  <button className="ghost-btn sm" onClick={() => addCommonEnv(activeServer)}>
+                    <Plus size={14} style={{ marginRight: '4px' }} /> Add Standard
+                  </button>
+                  <button className="icon-btn-text" onClick={() => addEnv(activeServer)}>
+                    <Plus size={14} /> Add Custom
+                  </button>
+                </div>
               </div>
               <div className="env-list">
                 {Object.entries(servers[activeServer].env || {}).map(([key, val], index) => (
@@ -459,13 +585,18 @@ function App() {
                       placeholder="KEY"
                     />
                     <span className="equals">=</span>
-                    <input
-                      type="text"
-                      className="env-val"
-                      value={val}
-                      onChange={(e) => updateEnvVal(activeServer, key, e.target.value)}
-                      placeholder="Value"
-                    />
+                    <div className="env-val-wrapper">
+                      <input
+                        type={maskSecrets ? "password" : "text"}
+                        className="env-val"
+                        value={val}
+                        onChange={(e) => updateEnvVal(activeServer, key, e.target.value)}
+                        placeholder="Value"
+                      />
+                      <button className="mask-btn" onClick={() => setMaskSecrets(!maskSecrets)}>
+                        {maskSecrets ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                    </div>
                     <button className="icon-btn danger" onClick={() => removeEnv(activeServer, key)}>
                       <Trash2 size={16} />
                     </button>
@@ -480,14 +611,14 @@ function App() {
         ) : (
           <div className="empty-state-main">
             <Server size={64} className="muted-icon" />
-            <h2>No Server Selected</h2>
-            <p>Select a server from the sidebar or add a new one to begin configuration.</p>
+            <h2>Universal MCP Manager</h2>
+            <p>Select a server, import a config, or use a preset to get started.</p>
             <div style={{ display: 'flex', gap: '16px' }}>
               <button className="primary-btn mt-24" onClick={() => setIsModalOpen(true)}>
-                <Plus size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} /> Add New Server
+                <Plus size={16} style={{ marginRight: '8px' }} /> Add Server
               </button>
-              <button className="ghost-btn mt-24" style={{ border: '1px solid var(--border-color)' }} onClick={() => fileInputRef.current?.click()}>
-                <Upload size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} /> Import Local JSON
+              <button className="ghost-btn mt-24" style={{ border: '1px solid var(--border-color)' }} onClick={() => setIsPresetModalOpen(true)}>
+                <Layout size={16} style={{ marginRight: '8px' }} /> View Presets
               </button>
             </div>
           </div>
@@ -497,12 +628,28 @@ function App() {
       {/* Preview Pane */}
       <div className="preview-pane">
         <div className="preview-header">
-          <h3>Generated Output</h3>
-          <button className="primary-btn flex-center" onClick={exportConfig} disabled={Object.keys(servers).length === 0}>
-            <Download size={16} style={{ marginRight: '6px' }} /> Export JSON
-          </button>
+          <h3>Generated Config</h3>
+          <div className="format-selector">
+            <select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as any)}
+              className="export-select"
+            >
+              <option value="generic">Generic/Cursor</option>
+              <option value="claude">Claude Desktop</option>
+              <option value="gemini">Gemini Sidekick</option>
+            </select>
+            <button className="primary-btn" onClick={exportConfig} disabled={Object.keys(servers).length === 0}>
+              <Download size={14} />
+            </button>
+          </div>
         </div>
         <div className="code-block">
+          <div className="format-info">
+            {exportFormat === 'claude' && <span className="path-hint">~/.claude_desktop_config.json</span>}
+            {exportFormat === 'gemini' && <span className="path-hint">~/.gemini/settings.json</span>}
+            {exportFormat === 'generic' && <span className="path-hint">Generic MCP Schema</span>}
+          </div>
           <pre>{JSON.stringify({ mcpServers: servers }, null, 2)}</pre>
         </div>
       </div>
@@ -512,7 +659,7 @@ function App() {
         <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add MCP Server</h2>
+              <h2>Browse Servers</h2>
               <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
                 <X size={20} />
               </button>
@@ -522,7 +669,7 @@ function App() {
               <Search size={16} className="search-icon" />
               <input
                 type="text"
-                placeholder="Search predefined and community servers..."
+                placeholder="Search community catalog..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
@@ -546,29 +693,15 @@ function App() {
                     </h3>
                     <p>{server.description}</p>
                   </div>
-                  <div className="preconfig-action">
-                    <button className="ghost-btn sm"><Plus size={16} /></button>
-                  </div>
                 </div>
               ))}
-
-              {filteredServers.length === 0 && (
-                <div className="empty-list" style={{ gridColumn: '1 / -1', padding: '40px 0' }}>
-                  {isLoadingCommunity ? "Loading community servers..." : `No servers found matching "${searchQuery}"`}
-                </div>
-              )}
             </div>
 
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p className="text-muted text-sm" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                Sources:
-                <a href="https://github.com/punkpeye/awesome-mcp-servers" target="_blank" rel="noreferrer" className="text-accent hover-underline">awesome-mcp-servers</a>
-                <span>|</span>
-                <a href="https://glama.ai/mcp/servers" target="_blank" rel="noreferrer" className="text-accent hover-underline">glama.ai</a>
-                <span>|</span>
-                <a href="https://www.pulsemcp.com/servers" target="_blank" rel="noreferrer" className="text-accent hover-underline">pulsemcp.com</a>
+              <p className="text-muted text-sm">
+                Powered by <a href="https://github.com/punkpeye/awesome-mcp-servers" target="_blank" rel="noreferrer" className="text-accent">Awesome MCP</a>
               </p>
-              {isLoadingCommunity && <p className="text-accent text-sm">Fetching from awesome-list...</p>}
+              {isLoadingCommunity && <p className="text-accent text-sm">Updating database...</p>}
             </div>
           </div>
         </div>

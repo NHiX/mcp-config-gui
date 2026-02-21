@@ -33,10 +33,10 @@ interface Preset {
 declare global {
   interface Window {
     electronAPI?: {
-      loadConfig: (client: string) => Promise<any>;
-      saveConfig: (client: string, config: any) => Promise<{ success?: boolean; error?: string }>;
-      discoverConfigs: () => Promise<Record<string, any>>;
-      testServer: (config: { command: string, args: string[], env: any }) => Promise<{ success?: boolean; error?: string }>;
+      loadConfig: (client: string) => Promise<McpConfig | null>;
+      saveConfig: (client: string, config: McpConfig) => Promise<{ success?: boolean; error?: string }>;
+      discoverConfigs: () => Promise<Record<string, McpConfig>>;
+      testServer: (config: { command: string, args: string[], env: Record<string, string> }) => Promise<{ success?: boolean; error?: string }>;
       stopServerTest: () => Promise<void>;
       onServerLog: (callback: (log: { type: string, data: string }) => void) => () => void;
       openConfigFolder: (client: string) => void;
@@ -44,6 +44,101 @@ declare global {
     };
   }
 }
+
+const presets: Preset[] = [
+  {
+    id: 'web-dev',
+    name: 'Web Developer',
+    description: 'GitHub, Postgres, and Brave Search for full-stack workflows.',
+    icon: <Globe size={24} />,
+    servers: {
+      'github': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '' } },
+      'postgres': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'] },
+      'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
+    }
+  },
+  {
+    id: 'data-science',
+    name: 'Data Scientist',
+    description: 'SQLite, Google Sheets, and Local Filesystem for data workflows.',
+    icon: <Database size={24} />,
+    servers: {
+      'sqlite': { command: 'uvx', args: ['mcp-server-sqlite', '--db-path', '~/data.db'] },
+      'google-sheets': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-google-sheets'] },
+      'filesystem': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/data'] }
+    }
+  },
+  {
+    id: 'security',
+    name: 'Security Researcher',
+    description: 'Search tools and system utilities for security analysis.',
+    icon: <Terminal size={24} />,
+    servers: {
+      'shodan': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-shodan'], env: { SHODAN_API_KEY: '' } },
+      'whois': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-whois'] },
+      'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
+    }
+  }
+];
+
+const preconfiguredServers: ServerTemplate[] = [
+  {
+    name: 'github',
+    description: 'Interact with GitHub API, read repos, manage PRs and issues',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+    icon: <Code size={24} />,
+    envKeys: ['GITHUB_PERSONAL_ACCESS_TOKEN']
+  },
+  {
+    name: 'postgres',
+    description: 'Connect to and query PostgreSQL databases',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'],
+    icon: <Database size={24} />,
+    envKeys: []
+  },
+  {
+    name: 'sqlite',
+    description: 'Interact with local SQLite databases',
+    command: 'uvx',
+    args: ['mcp-server-sqlite', '--db-path', '~/test.db'],
+    icon: <Database size={24} />,
+    envKeys: []
+  },
+  {
+    name: 'brave-search',
+    description: 'Web search using Brave Search API',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-brave-search'],
+    icon: <Globe size={24} />,
+    envKeys: ['BRAVE_API_KEY']
+  },
+  {
+    name: 'filesystem',
+    description: 'Read and write to the local filesystem',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/Desktop'],
+    icon: <Terminal size={24} />,
+    envKeys: []
+  },
+  {
+    name: 'slack',
+    description: 'Interact with Slack channels and messages',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-slack'],
+    icon: <Code size={24} />,
+    envKeys: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']
+  },
+  {
+    name: 'custom',
+    description: 'Start from scratch with an empty configuration',
+    command: '',
+    args: [],
+    icon: <Settings size={24} />,
+    envKeys: []
+  }
+];
 
 function App() {
   const [servers, setServers] = useState<Record<string, McpServerConfig>>({});
@@ -108,6 +203,7 @@ function App() {
         setLastSyncStatus(`Error: ${result?.error}`);
       }
     } catch (err) {
+      console.error('Sync failed', err);
       setLastSyncStatus('Sync failed');
     } finally {
       setIsSyncing(false);
@@ -131,6 +227,7 @@ function App() {
         setIsTesting(false);
       }
     } catch (err) {
+      console.error('Test server error', err);
       setIsTesting(false);
     }
   };
@@ -154,7 +251,7 @@ function App() {
     try {
       const results = await window.electronAPI?.discoverConfigs();
       if (results) {
-        let mergedServers = { ...servers };
+        const mergedServers = { ...servers };
         let foundNew = false;
 
         Object.keys(results).forEach(client => {
@@ -182,102 +279,6 @@ function App() {
       console.error('Discovery failed', err);
     }
   };
-
-  const presets: Preset[] = [
-    {
-      id: 'web-dev',
-      name: 'Web Developer',
-      description: 'GitHub, Postgres, and Brave Search for full-stack workflows.',
-      icon: <Globe size={24} />,
-      servers: {
-        'github': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '' } },
-        'postgres': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'] },
-        'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
-      }
-    },
-    {
-      id: 'data-science',
-      name: 'Data Scientist',
-      description: 'SQLite, Google Sheets, and Local Filesystem for data workflows.',
-      icon: <Database size={24} />,
-      servers: {
-        'sqlite': { command: 'uvx', args: ['mcp-server-sqlite', '--db-path', '~/data.db'] },
-        'google-sheets': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-google-sheets'] },
-        'filesystem': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/data'] }
-      }
-    },
-    {
-      id: 'security',
-      name: 'Security Researcher',
-      description: 'Search tools and system utilities for security analysis.',
-      icon: <Terminal size={24} />,
-      servers: {
-        'shodan': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-shodan'], env: { SHODAN_API_KEY: '' } },
-        'whois': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-whois'] },
-        'brave-search': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } }
-      }
-    }
-  ];
-
-  // Extended list of pre-configured servers based on awesome-mcp-servers
-  const preconfiguredServers: ServerTemplate[] = [
-    {
-      name: 'github',
-      description: 'Interact with GitHub API, read repos, manage PRs and issues',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-github'],
-      icon: <Code size={24} />,
-      envKeys: ['GITHUB_PERSONAL_ACCESS_TOKEN']
-    },
-    {
-      name: 'postgres',
-      description: 'Connect to and query PostgreSQL databases',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'],
-      icon: <Database size={24} />,
-      envKeys: []
-    },
-    {
-      name: 'sqlite',
-      description: 'Interact with local SQLite databases',
-      command: 'uvx',
-      args: ['mcp-server-sqlite', '--db-path', '~/test.db'],
-      icon: <Database size={24} />,
-      envKeys: []
-    },
-    {
-      name: 'brave-search',
-      description: 'Web search using Brave Search API',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-brave-search'],
-      icon: <Globe size={24} />,
-      envKeys: ['BRAVE_API_KEY']
-    },
-    {
-      name: 'filesystem',
-      description: 'Read and write to the local filesystem',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/Desktop'],
-      icon: <Terminal size={24} />,
-      envKeys: []
-    },
-    {
-      name: 'slack',
-      description: 'Interact with Slack channels and messages',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-slack'],
-      icon: <Code size={24} />,
-      envKeys: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']
-    },
-    {
-      name: 'custom',
-      description: 'Start from scratch with an empty configuration',
-      command: '',
-      args: [],
-      icon: <Settings size={24} />,
-      envKeys: []
-    }
-  ];
 
   // Fetch awesome-mcp-servers dynamically
   useEffect(() => {
@@ -511,6 +512,7 @@ function App() {
           alert("Invalid MCP configuration file layout.");
         }
       } catch (err) {
+        console.error('Import failed', err);
         alert("Could not parse JSON file.");
       }
     };
@@ -868,7 +870,7 @@ function App() {
           <div className="format-selector">
             <select
               value={exportFormat}
-              onChange={(e) => setExportFormat(e.target.value as any)}
+              onChange={(e) => setExportFormat(e.target.value as 'generic' | 'claude' | 'gemini' | 'cursor')}
               className="export-select"
             >
               <option value="generic">Standard (mcp_config.json)</option>

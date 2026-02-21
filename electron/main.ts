@@ -139,8 +139,8 @@ ipcMain.handle('test-server', async (event, { command, args, env }) => {
         });
 
         return { success: true };
-    } catch (err: any) {
-        return { error: err.message };
+    } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) };
     }
 });
 

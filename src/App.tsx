@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload, Eye, EyeOff, Layout, ListChecks, CheckCircle2 } from 'lucide-react'
+import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload, Eye, EyeOff, Layout, ListChecks, CheckCircle2, RefreshCw, FolderOpen } from 'lucide-react'
 import './App.css'
 
 interface McpServerConfig {
@@ -30,6 +30,17 @@ interface Preset {
   icon: React.ReactNode;
 }
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      loadConfig: (client: string) => Promise<any>;
+      saveConfig: (client: string, config: any) => Promise<{ success?: boolean; error?: string }>;
+      openConfigFolder: (client: string) => void;
+      isNative: boolean;
+    };
+  }
+}
+
 function App() {
   const [servers, setServers] = useState<Record<string, McpServerConfig>>({});
   const [activeServer, setActiveServer] = useState<string | null>(null);
@@ -40,7 +51,45 @@ function App() {
   const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
   const [maskSecrets, setMaskSecrets] = useState(true);
   const [exportFormat, setExportFormat] = useState<'generic' | 'claude' | 'gemini'>('generic');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isNative = !!window.electronAPI?.isNative;
+
+  useEffect(() => {
+    if (isNative) {
+      const initLoad = async () => {
+        const config = await window.electronAPI?.loadConfig('claude');
+        if (config && config.mcpServers) {
+          setServers(config.mcpServers);
+          if (Object.keys(config.mcpServers).length > 0) {
+            setActiveServer(Object.keys(config.mcpServers)[0]);
+          }
+        }
+      };
+      initLoad();
+    }
+  }, [isNative]);
+
+  const syncToNative = async () => {
+    if (!isNative) return;
+    setIsSyncing(true);
+    setLastSyncStatus(null);
+    try {
+      const result = await window.electronAPI?.saveConfig(exportFormat === 'generic' ? 'claude' : exportFormat, { mcpServers: servers });
+      if (result?.success) {
+        setLastSyncStatus('Saved successfully');
+        setTimeout(() => setLastSyncStatus(null), 3000);
+      } else {
+        setLastSyncStatus(`Error: ${result?.error}`);
+      }
+    } catch (err) {
+      setLastSyncStatus('Sync failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const presets: Preset[] = [
     {
@@ -425,6 +474,38 @@ function App() {
             <Layout size={18} />
             <span>Presets</span>
           </button>
+
+          {isNative && (
+            <div className="native-actions" style={{ marginTop: 'auto', padding: '12px 0 0' }}>
+              <button
+                className={`primary-btn w-full ${isSyncing ? 'loading' : ''}`}
+                onClick={syncToNative}
+                disabled={isSyncing}
+                style={{ gap: '8px' }}
+              >
+                <RefreshCw size={16} className={isSyncing ? 'spin' : ''} />
+                {isSyncing ? 'Syncing...' : 'Sync to Native'}
+              </button>
+              {lastSyncStatus && (
+                <p className="sync-status" style={{
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  marginTop: '8px',
+                  color: lastSyncStatus.includes('Error') ? 'var(--danger)' : 'var(--success)'
+                }}>
+                  {lastSyncStatus}
+                </p>
+              )}
+              <button
+                className="ghost-btn w-full"
+                style={{ marginTop: '8px', gap: '8px', fontSize: '12px' }}
+                onClick={() => window.electronAPI?.openConfigFolder(exportFormat === 'generic' ? 'claude' : exportFormat)}
+              >
+                <FolderOpen size={16} />
+                Open Config Folder
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="server-list">

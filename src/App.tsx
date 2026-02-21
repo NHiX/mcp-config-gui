@@ -35,6 +35,7 @@ declare global {
     electronAPI?: {
       loadConfig: (client: string) => Promise<any>;
       saveConfig: (client: string, config: any) => Promise<{ success?: boolean; error?: string }>;
+      discoverConfigs: () => Promise<Record<string, any>>;
       openConfigFolder: (client: string) => void;
       isNative: boolean;
     };
@@ -50,7 +51,7 @@ function App() {
   const [communityServers, setCommunityServers] = useState<ServerTemplate[]>([]);
   const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
   const [maskSecrets, setMaskSecrets] = useState(true);
-  const [exportFormat, setExportFormat] = useState<'generic' | 'claude' | 'gemini'>('generic');
+  const [exportFormat, setExportFormat] = useState<'generic' | 'claude' | 'gemini' | 'cursor'>('generic');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +89,40 @@ function App() {
       setLastSyncStatus('Sync failed');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleDiscovery = async () => {
+    if (!isNative) return;
+    try {
+      const results = await window.electronAPI?.discoverConfigs();
+      if (results) {
+        let mergedServers = { ...servers };
+        let foundNew = false;
+
+        Object.keys(results).forEach(client => {
+          const config = results[client];
+          if (config && config.mcpServers) {
+            Object.keys(config.mcpServers).forEach(serverName => {
+              if (!mergedServers[serverName]) {
+                mergedServers[serverName] = config.mcpServers[serverName];
+                foundNew = true;
+              }
+            });
+          }
+        });
+
+        if (foundNew) {
+          setServers(mergedServers);
+          setLastSyncStatus('Discovered and merged new servers');
+          setTimeout(() => setLastSyncStatus(null), 3000);
+        } else {
+          setLastSyncStatus('No new servers found');
+          setTimeout(() => setLastSyncStatus(null), 3000);
+        }
+      }
+    } catch (err) {
+      console.error('Discovery failed', err);
     }
   };
 
@@ -391,6 +426,7 @@ function App() {
     let filename = 'mcp_config.json';
     if (exportFormat === 'claude') filename = 'claude_desktop_config.json';
     if (exportFormat === 'gemini') filename = 'gemini_settings.json';
+    if (exportFormat === 'cursor') filename = 'mcpServers.json';
 
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -503,6 +539,14 @@ function App() {
               >
                 <FolderOpen size={16} />
                 Open Config Folder
+              </button>
+              <button
+                className="ghost-btn w-full mt-8"
+                style={{ gap: '8px', fontSize: '12px', border: '1px solid var(--border-color)' }}
+                onClick={handleDiscovery}
+              >
+                <Search size={16} />
+                Smart Discovery
               </button>
             </div>
           )}
@@ -716,9 +760,10 @@ function App() {
               onChange={(e) => setExportFormat(e.target.value as any)}
               className="export-select"
             >
-              <option value="generic">Generic/Cursor</option>
+              <option value="generic">Standard (mcp_config.json)</option>
               <option value="claude">Claude Desktop</option>
               <option value="gemini">Gemini Sidekick</option>
+              <option value="cursor">Cursor AI</option>
             </select>
             <button className="primary-btn" onClick={exportConfig} disabled={Object.keys(servers).length === 0}>
               <Download size={14} />
@@ -729,6 +774,7 @@ function App() {
           <div className="format-info">
             {exportFormat === 'claude' && <span className="path-hint">~/.claude_desktop_config.json</span>}
             {exportFormat === 'gemini' && <span className="path-hint">~/.gemini/settings.json</span>}
+            {exportFormat === 'cursor' && <span className="path-hint">Cursor global storage path</span>}
             {exportFormat === 'generic' && <span className="path-hint">Generic MCP Schema</span>}
           </div>
           <pre>{JSON.stringify({ mcpServers: servers }, null, 2)}</pre>

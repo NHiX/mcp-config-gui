@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -10,6 +11,8 @@ const __dirname = path.dirname(__filename);
 import serve from 'electron-serve';
 
 const loadURL = serve({ directory: path.join(__dirname, '../dist') });
+
+let activeTestProcess: ChildProcess | null = null;
 
 function getPathForClient(client: string): string {
     const home = os.homedir();
@@ -101,6 +104,53 @@ ipcMain.handle('discover-configs', async () => {
         }
     }
     return results;
+});
+
+ipcMain.handle('test-server', async (event, { command, args, env }) => {
+    if (activeTestProcess) {
+        activeTestProcess.kill();
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return { error: 'Window not found' };
+
+    try {
+        // Prepare environment (merge with project env)
+        const combinedEnv = { ...process.env, ...env };
+
+        activeTestProcess = spawn(command, args, { env: combinedEnv, shell: true });
+
+        activeTestProcess.stdout?.on('data', (data) => {
+            win.webContents.send('server-log', { type: 'stdout', data: data.toString() });
+        });
+
+        activeTestProcess.stderr?.on('data', (data) => {
+            win.webContents.send('server-log', { type: 'stderr', data: data.toString() });
+        });
+
+        activeTestProcess.on('close', (code) => {
+            win.webContents.send('server-log', { type: 'system', data: `Process exited with code ${code}` });
+            activeTestProcess = null;
+        });
+
+        activeTestProcess.on('error', (err) => {
+            win.webContents.send('server-log', { type: 'error', data: err.message });
+            activeTestProcess = null;
+        });
+
+        return { success: true };
+    } catch (err: any) {
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('stop-test-server', () => {
+    if (activeTestProcess) {
+        activeTestProcess.kill();
+        activeTestProcess = null;
+        return { success: true };
+    }
+    return { success: false };
 });
 
 app.whenReady().then(() => {

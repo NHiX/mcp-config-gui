@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload, Eye, EyeOff, Layout, ListChecks, CheckCircle2, RefreshCw, FolderOpen } from 'lucide-react'
+import { Server, Settings, Plus, Trash2, Download, X, Search, Globe, Database, Code, Terminal, Upload, Eye, EyeOff, Layout, ListChecks, CheckCircle2, RefreshCw, FolderOpen, Play, Square, Activity } from 'lucide-react'
 import './App.css'
 
 interface McpServerConfig {
@@ -36,6 +36,9 @@ declare global {
       loadConfig: (client: string) => Promise<any>;
       saveConfig: (client: string, config: any) => Promise<{ success?: boolean; error?: string }>;
       discoverConfigs: () => Promise<Record<string, any>>;
+      testServer: (config: { command: string, args: string[], env: any }) => Promise<{ success?: boolean; error?: string }>;
+      stopServerTest: () => Promise<void>;
+      onServerLog: (callback: (log: { type: string, data: string }) => void) => () => void;
       openConfigFolder: (client: string) => void;
       isNative: boolean;
     };
@@ -54,9 +57,28 @@ function App() {
   const [exportFormat, setExportFormat] = useState<'generic' | 'claude' | 'gemini' | 'cursor'>('generic');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testLogs, setTestLogs] = useState<{ type: string, data: string, id: number }[]>([]);
+  const [isLogVisible, setIsLogVisible] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const isNative = !!window.electronAPI?.isNative;
+
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [testLogs]);
+
+  useEffect(() => {
+    if (isNative) {
+      const cleanup = window.electronAPI?.onServerLog((log) => {
+        setTestLogs(prev => [...prev, { ...log, id: Date.now() + Math.random() }]);
+      });
+      return cleanup;
+    }
+  }, [isNative]);
 
   useEffect(() => {
     if (isNative) {
@@ -90,6 +112,33 @@ function App() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleStartTest = async () => {
+    if (!activeServer || !isNative) return;
+    setTestLogs([]);
+    setIsTesting(true);
+    setIsLogVisible(true);
+    try {
+      const server = servers[activeServer];
+      const result = await window.electronAPI?.testServer({
+        command: server.command,
+        args: server.args,
+        env: server.env || {}
+      });
+      if (result?.error) {
+        setTestLogs(prev => [...prev, { type: 'error', data: result.error!, id: Date.now() }]);
+        setIsTesting(false);
+      }
+    } catch (err) {
+      setIsTesting(false);
+    }
+  };
+
+  const handleStopTest = async () => {
+    if (!isNative) return;
+    await window.electronAPI?.stopServerTest();
+    setIsTesting(false);
   };
 
   const handleDiscovery = async () => {
@@ -633,7 +682,24 @@ function App() {
                     title="Click to rename server"
                   />
                 </div>
-                <div className="header-actions">
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                  {isNative && (
+                    <button
+                      className={`primary-btn ${isTesting ? 'danger' : ''}`}
+                      style={{ padding: '6px 12px', borderRadius: '6px', backgroundColor: isTesting ? 'var(--danger)' : '#238636' }}
+                      onClick={isTesting ? handleStopTest : handleStartTest}
+                    >
+                      {isTesting ? (
+                        <>
+                          <Square size={16} style={{ marginRight: '6px' }} /> Stop Test
+                        </>
+                      ) : (
+                        <>
+                          <Play size={16} style={{ marginRight: '6px' }} /> Test Server
+                        </>
+                      )}
+                    </button>
+                  )}
                   <button
                     className="ghost-btn danger-hover"
                     style={{ padding: '6px 12px', borderRadius: '6px' }}
@@ -732,6 +798,35 @@ function App() {
                 )}
               </div>
             </div>
+
+            {/* Live Logs Panel */}
+            {isNative && isLogVisible && (
+              <div className="logs-panel mt-16">
+                <div className="logs-header" onClick={() => setIsLogVisible(!isLogVisible)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={14} className={isTesting ? 'pulse' : ''} />
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>LIVE LOGS</span>
+                    {isTesting && <span className="badge-live">RUNNING</span>}
+                  </div>
+                  <button className="icon-btn-text sm" onClick={(e) => { e.stopPropagation(); setTestLogs([]); }}>
+                    Clear
+                  </button>
+                </div>
+                <div className="logs-body">
+                  {testLogs.length === 0 ? (
+                    <div className="empty-logs">Listening for server output...</div>
+                  ) : (
+                    testLogs.map(log => (
+                      <div key={log.id} className={`log-entry ${log.type}`}>
+                        <span className="log-prefix">[{log.type.toUpperCase()}]</span>
+                        <span className="log-text">{log.data}</span>
+                      </div>
+                    ))
+                  )}
+                  <div ref={logEndRef} />
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="empty-state-main">
